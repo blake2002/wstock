@@ -153,11 +153,26 @@ class Stock():
         """
         df = self.wind_stock_df
         maxup_df = df.loc[df['MAXUPORDOWN'] ==1] #1 涨停
-        type_df = s1.windtype1_df
-        df = pd.merge(left=maxup_df,right=type_df,how='inner',left_on='WIND_CODE',right_on='windcode',left_index=True)
+        type_df = self.windtype1_df
+        maxup_df = pd.merge(left=maxup_df,right=type_df,how='inner',left_on='WIND_CODE',right_on='windcode',left_index=True)
 
-        return df
+        return maxup_df
 
+    def get_zha_maxup_stock(self):
+
+        """
+        炸板
+        """
+        df = self.wind_stock_df
+        # 炸板 ,最高价=涨停价 收盘价< 涨停价
+        zha_maxup_df = df.loc[(df['HIGH3']==df['MAXUP']) & (df['CLOSE3'] < df['MAXUP'])]
+        return zha_maxup_df
+
+    def get_first_maxup_stock(self):
+        pass
+
+    def get_lian_maxup_stock(self):
+        pass
 
     def get_data_frm_wind(self,windcodes,start_time, end_time):
 
