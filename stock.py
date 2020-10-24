@@ -169,9 +169,32 @@ class Stock():
         return zha_maxup_df
 
     def get_first_maxup_stock(self):
-        pass
+
+        """
+        首次涨停 算法：找到num=1 的windcode 就是首板
+        :return:
+        """
+
+        maxup_df = self.get_maxup_stock()
+
+        maxup_df['NUM'] = 1 # 为数量统计 增加一列 为1
+        maxup_sum_s = maxup_df.groupby(by='WIND_CODE')['NUM'].sum()
+        # sum == 1 的为首板
+        first_s = maxup_sum_s.loc[maxup_sum_s ==1]
+
+        # 返回
+        first_df = maxup_df.loc[maxup_df['WIND_CODE'].isin(first_s.index)]
+
+        return  first_df
+
+
 
     def get_lian_maxup_stock(self):
+
+        """
+        连板
+        :return:
+        """
         pass
 
     def get_data_frm_wind(self,windcodes,start_time, end_time):
@@ -194,7 +217,7 @@ class Stock():
 
             df[1].to_csv("{}/{}.csv".format(data_dir,wind_code))
             print('{} ok'.format(wind_code))
-            time.sleep(random.randint(1,6))
+            time.sleep(random.randint(1,2))
 
     def get_data_4(self,start,end,grp_no):
 
