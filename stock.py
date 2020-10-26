@@ -126,24 +126,28 @@ class Stock():
         :return:
         """
 
-        windcode_df  = list(self.dapan_df['wind_code'])
-        return {'大盘':self.get_chg_amt_count_frm_df(dtime,windcode_df)}
+        windcode_df  = list(self.dapan_df['windcode'])
+        df = self.get_chg_amt_count_frm_df(dtime,windcode_df)
+        df['type'] = '大盘'
+        return df
 
     def get_windtype_chg_amt_count(self,dtime=None):
 
-        """
+        """`
         计算wind1类 各个板块 涨跌平家数,成交量
         :param dtime:
         :return:
         """
         wind_type_code_df  = self.windtype1_df
-        wind_types =  list(wind_type_code_df['type'].drop_duplicates())
-        res_dict = {}
+        wind_types =  list(wind_type_code_df['wind_type1'].drop_duplicates())
+        res_dict = []
         for w_type in wind_types:
-            type_df = wind_type_code_df.loc[wind_type_code_df['type']==w_type]['windcode']
-            res_dict[w_type] = self.get_chg_amt_count_frm_df(dtime,list(type_df))
+            type_df = wind_type_code_df.loc[wind_type_code_df['wind_type1']==w_type]['windcode']
+            ddf= self.get_chg_amt_count_frm_df(dtime,list(type_df)).fillna(0)
+            ddf['type']=w_type
+            res_dict.append(ddf)
 
-        return  res_dict
+        return  pd.concat(res_dict)
 
     def get_maxup_stock(self):
 
@@ -195,7 +199,19 @@ class Stock():
         连板
         :return:
         """
-        pass
+        maxup_df = self.get_maxup_stock()
+        maxup_df['NUM'] = 1
+        sum_s = maxup_df.groupby(by='WIND_CODE')['NUM'].sum()
+        sum_s = sum_s.loc[sum_s > 1] # 大于1 的有可能是连板
+        maxup_multi_df = maxup_df.loc[maxup_df['WIND_CODE'].isin(sum_s.index)] #  找到所有大于1 的
+        maxup_multi_df.index = maxup_multi_df['WIND_CODE'] + '|' + maxup_multi_df['DTATE_TIME']
+        maxup_multi_df['DTATE_TIME'] = pd.to_datetime(maxup_multi_df['DTATE_TIME'])
+        day = pd.Timedelta('1d')
+        g_code_df = maxup_multi_df.groupby(by='WIND_CODE')['DTATE_TIME'].diff() # 时间做差  =1 的为连续的
+        lianban_se = g_code_df.loc[g_code_df==day] # 找到=1的
+        lianban_df = maxup_multi_df.loc[(maxup_multi_df['WIND_CODE']+'|'+maxup_multi_df['DTATE_TIME']).isin(list(lianban_se.index))]
+
+        return  lianban_df
 
     def get_data_frm_wind(self,windcodes,start_time, end_time):
 
