@@ -40,6 +40,7 @@ a_sectid='a001010100000000' #全部A股
 cy_sectid='a001010r00000000' #创业板
 
 DATETIME_FORMAT='%Y%m%d'
+DATETIME_YYYY_MM_DD_FORMAT='%Y-%m-%d'
 
 
 class Stock():
@@ -88,14 +89,21 @@ class Stock():
         if self.start is None:
             self.start = (datetime.strptime(self.end,DATETIME_FORMAT) - timedelta(30)).strftime(DATETIME_FORMAT)
         # 时间过滤
-        date_filter = (self.wind_stock_df['DTATE_TIME']>self.start) &(self.wind_stock_df['DTATE_TIME']<=self.end)
+        start_date = self.start
+        end_date = self.end
+        if len(self.start) == 8 and self.start.count('-') == 0:
+            start_date = datetime.strptime(self.start,DATETIME_FORMAT).strftime(DATETIME_YYYY_MM_DD_FORMAT)
+        if len(self.end) == 8 and self.end.count('-') == 0:
+            end_date = datetime.strptime(self.end,DATETIME_FORMAT).strftime(DATETIME_YYYY_MM_DD_FORMAT)
+        self.wind_stock_df['DTATE_TIME'] = pd.to_datetime(self.wind_stock_df['DTATE_TIME'])
+        date_filter = (self.wind_stock_df['DTATE_TIME']>start_date) &(self.wind_stock_df['DTATE_TIME']<=end_date)
 
         # 去掉 ST df['shortname'].str.contains('ST') == False
         no_st_wind_codes = list(self.windtype1_df.loc[self.windtype1_df['sec_name'].str.contains('ST') == False]['wind_code'])
         no_st_filter = self.wind_stock_df['WIND_CODE'].isin(no_st_wind_codes)
         self.wind_stock_df = self.wind_stock_df.loc[date_filter & no_st_filter]
         # 统一 成交额 单位为 亿  round(df['AMT']/100000000+1/100000000,2) 四舍五入
-        self.wind_stock_df =  round(self.wind_stock_df['AMT']/100000000+1/100000000,2)
+        self.wind_stock_df['AMT'] =  round(self.wind_stock_df['AMT']/100000000+1/100000000,2)
 
     def get_a_chuangye_sectid(self):
         """
@@ -256,7 +264,7 @@ class Stock():
         return {'up':up,'down':down,'flat':flat,'volume':volume}
 
 
-    def get_chg_amt_count_frm_df(self):
+    def get_chg_amt_count_frm_df(self,codes=None):
 
         """
          根据本地csv
@@ -264,6 +272,9 @@ class Stock():
         :return:
         """
         df = self.wind_stock_df
+
+        if codes is not None:
+            df = self.wind_stock_df.loc[self.wind_stock_df['WIND_CODE'].isin(codes)]
 
         #为了统计方便 增加一列 值都为 1
         df['CHG_FLAG']=1
@@ -395,7 +406,7 @@ class Stock():
         multi_windcode_s = multi_windcode_s.loc[multi_windcode_s == True]
         multi_maxup_df = df.loc[df['WIND_CODE'].isin(multi_windcode_s.index)]
         t_df = []
-        multi_maxup_df.groupby(by=['WIND_CODE']).apply(lambda x : s.show_maxup(x,t_df))
+        multi_maxup_df.groupby(by=['WIND_CODE']).apply(lambda x : self.show_maxup(x,t_df))
 
 
         return pd.concat(t_df)
