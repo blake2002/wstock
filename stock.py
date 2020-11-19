@@ -41,6 +41,7 @@ cy_sectid='a001010r00000000' #创业板
 
 DATETIME_FORMAT='%Y%m%d'
 DATETIME_YYYY_MM_DD_FORMAT='%Y-%m-%d'
+DOWNLOAD = 'download'
 
 
 class Stock():
@@ -80,6 +81,7 @@ class Stock():
         windstock_path = os.path.join(self.data_path, self.wind_stock_filename)
         if os.path.exists(windstock_path):
             self.wind_stock_df = pd.read_csv(windstock_path,sep=',',header=0)
+            self.wind_stock_df.fillna(0)
         else:
             raise Exception('没有windstock.csv文件，先下载')
 
@@ -95,12 +97,12 @@ class Stock():
             start_date = datetime.strptime(self.start,DATETIME_FORMAT).strftime(DATETIME_YYYY_MM_DD_FORMAT)
         if len(self.end) == 8 and self.end.count('-') == 0:
             end_date = datetime.strptime(self.end,DATETIME_FORMAT).strftime(DATETIME_YYYY_MM_DD_FORMAT)
-        self.wind_stock_df['DTATE_TIME'] = pd.to_datetime(self.wind_stock_df['DTATE_TIME'])
-        date_filter = (self.wind_stock_df['DTATE_TIME']>start_date) &(self.wind_stock_df['DTATE_TIME']<=end_date)
+        self.wind_stock_df['DATE_TIME'] = pd.to_datetime(self.wind_stock_df['DATE_TIME'])
+        date_filter = (self.wind_stock_df['DATE_TIME']>start_date) &(self.wind_stock_df['DATE_TIME']<=end_date)
 
         # 去掉 ST df['shortname'].str.contains('ST') == False
         no_st_wind_codes = list(self.windtype1_df.loc[self.windtype1_df['sec_name'].str.contains('ST') == False]['wind_code'])
-        no_st_filter = self.wind_stock_df['WIND_CODE'].isin(no_st_wind_codes)
+        no_st_filter = self.wind_stock_df['WINDCODE'].isin(no_st_wind_codes)
         self.wind_stock_df = self.wind_stock_df.loc[date_filter & no_st_filter]
         # 统一 成交额 单位为 亿  round(df['AMT']/100000000+1/100000000,2) 四舍五入
         self.wind_stock_df['AMT'] =  round(self.wind_stock_df['AMT']/100000000+1/100000000,2)
@@ -274,21 +276,21 @@ class Stock():
         df = self.wind_stock_df
 
         if codes is not None:
-            df = self.wind_stock_df.loc[self.wind_stock_df['WIND_CODE'].isin(codes)]
+            df = self.wind_stock_df.loc[self.wind_stock_df['WINDCODE'].isin(codes)]
 
         #为了统计方便 增加一列 值都为 1
         df['CHG_FLAG']=1
         # 统计
         # 上涨 (df['trade_status'] == '交易') --去掉停牌
         df = df[df['TRADE_STATUS'] == '交易']
-        up_chg_count = df.loc[(df['CHG'] > 0)].groupby(by='DTATE_TIME')['CHG_FLAG'].sum()
+        up_chg_count = df.loc[(df['CHG'] > 0)].groupby(by='DATE_TIME')['CHG_FLAG'].sum()
         # 下跌
-        down_chg_count = df.loc[(df['CHG'] < 0)].groupby(by='DTATE_TIME')['CHG_FLAG'].sum()
+        down_chg_count = df.loc[(df['CHG'] < 0)].groupby(by='DATE_TIME')['CHG_FLAG'].sum()
         # 平
-        no_chg_count = df.loc[(df['CHG'] == 0.0)].groupby(by='DTATE_TIME')['CHG_FLAG'].sum()
+        no_chg_count = df.loc[(df['CHG'] == 0.0)].groupby(by='DATE_TIME')['CHG_FLAG'].sum()
 
         # 成交额
-        amount = df.fillna(0).groupby(by='DTATE_TIME')['AMT'].sum()
+        amount = df.fillna(0).groupby(by='DATE_TIME')['AMT'].sum()
 
         return pd.DataFrame({'up':up_chg_count,'down':down_chg_count,'flat':no_chg_count,'amount':amount})
 
@@ -357,7 +359,7 @@ class Stock():
         # 列出板块 涨停股
         :return:
         """
-        df = self.wind_stock_df.sort_values(["WIND_CODE","DTATE_TIME"])
+        df = self.wind_stock_df.sort_values(["WINDCODE","DATE_TIME"])
         df['CONTINOUS_FLAG']=pd.RangeIndex(0,len(df))
         maxup_df = df.loc[df['MAXUPORDOWN'] ==1] #1 涨停
         type_df = self.windtype1_df
@@ -441,8 +443,8 @@ class Stock():
         # time.sleep(random.randint(1,))
         print("time:{},wcode:{},start get_data_frm_wind".format(datetime.now(),','.join(windcodes)))
         for wind_code in windcodes:
-            start_time = wind_date_map[wind_code](0)
-            end_time  = wind_date_map[wind_code](1)
+            start_time = wind_date_map[wind_code][0]
+            end_time  = wind_date_map[wind_code][1]
             df_path="{}\\{}_{}_{}.csv".format(temp_dir,wind_code,start_time,end_time)
             if not os.path.exists(df_path):
                 df=w.wsd(wind_code, "windcode,amt,chg,high3,low3,close3,trade_status,maxup,maxupordown", start_time, end_time, "", usedf=True)
@@ -450,7 +452,7 @@ class Stock():
                 df[1].rename(columns={'windcode':'WIND_CODE'})
                 df[1].to_csv(df_path)
                 print('save windcode:{},to path:{} ok'.format(wind_code,df_path))
-                time.sleep(random.randint(1,2))
+                time.sleep(random.randint(1,5))
 
     def get_wincode_date_map(self, data_dir):
 
@@ -459,7 +461,7 @@ class Stock():
         :param data_dir:
         :return:
         '''
-        wincode_date_dict = defaultdict(set)
+        wincode_date_dict = defaultdict(list)
         # csv 文件的名字
         filenames = (pathlib.PurePath(f).stem for f in glob.glob('{}\\*.csv'.format(data_dir)))
         for f in filenames:
@@ -470,18 +472,18 @@ class Stock():
                 start_date = self.start
             if end_date is None:
                 end_date = self.end
-            wincode_date_dict[wcode].add(start_date,end_date)
+            wincode_date_dict[wcode]=[start_date,end_date]
 
-        # 根据csv文件名字中的时间，计算起止时间, set 中保存 时间最大的那个
+        # 根据csv文件名字中的时间，计算起止时间, list 中保存 时间最大的那个
         for k,v in wincode_date_dict.items():
-            wincode_date_dict[k]=set(min(max(v),self.start),max(max(v),self.end))
+            wincode_date_dict[k] = [min(max(v),self.start),max(max(v), self.end)]
         wcodes1 = set(wincode_date_dict.keys())
-        wcodes2 = set(self.A_WINDCODES)
+        wcodes2 = set(self.A_WINDCODES.split(','))
 
         wcodes3 = wcodes2.difference(wcodes1)
         if wcodes3 is not None and len(wcodes3) > 0:
             for wcode in wcodes3:
-                wincode_date_dict[wcode].add(self.start,self.end)
+                wincode_date_dict[wcode]=[self.start,self.end]
         return  wincode_date_dict
 
 
@@ -497,7 +499,7 @@ class Stock():
 
 
         # 以当前时间建立文件夹
-        data_dir = os.path.join(self.data_path, 'data_{}'.format(datetime.now().strftime(DATETIME_FORMAT)))
+        data_dir = os.path.join(self.data_path, 'data_{}'.format(DOWNLOAD)) #datetime.now().strftime(DATETIME_FORMAT)))
         if not os.path.exists(data_dir):
             os.mkdir(data_dir)
 
@@ -531,7 +533,7 @@ class Stock():
         print('merge {}.*csv'.format(temp_path))
         # 只合并 startdate enddate 的csv
         paths = glob.glob(temp_path)
-        merge_df = pd.concat((self._fix_df(pd.read_csv(p,sep=',',header=0),p) for p in paths))
+        merge_df = pd.concat(pd.read_csv(p,sep=',',header=0) for p in paths)
         merge_df.rename(columns={'Unnamed: 0':'DATE_TIME'},inplace=True)
         merge_df.index=pd.RangeIndex(0,len(merge_df))
         csv_path = os.path.join(self.data_path,self.wind_stock_filename)
@@ -539,9 +541,9 @@ class Stock():
         print('save all stock to {}'.format(csv_path))
         return merge_df
 
-    def _fix_df(self,df,filname):
-        df['WIND_CODE'] = os.path.basename(filname).strip().rstrip('.csv').strip()
-        return  df
+    # def _fix_df(self,df,filname):
+    #     df['WIND_CODE'] = os.path.basename(filname).strip().rstrip('.csv').strip()
+    #     return  df
 
     def import_data_to_mysqldb(self, windcodes):
         from sqlalchemy import create_engine
@@ -558,7 +560,7 @@ class Stock():
                 continue
             df=pd.read_csv(csv_path,sep=',',header=0)
             df['WIND_CODE'] = wind_code
-            df.rename(columns={'Unnamed: 0':'DTATE_TIME'},inplace=True)
+            df.rename(columns={'Unnamed: 0':'DATE_TIME'},inplace=True)
             pd.io.sql.to_sql(df,'wind_stock',connect,if_exists = "append",index  = False)
             print('time:{},wcode:{},ok'.format(datetime.now(),wind_code))
         print('t:{},codes:{}'.format(datetime.now(),','.join(windcodes)))
@@ -582,7 +584,7 @@ class Stock():
                 continue
             df=pd.read_csv(csv_path,sep=',',header=0)
             df['WIND_CODE'] = wind_code
-            df.rename(columns={'Unnamed: 0':'DTATE_TIME'},inplace=True)
+            df.rename(columns={'Unnamed: 0':'DATE_TIME'},inplace=True)
             pd.io.sql.to_sql(df,'wind_stock',connect,if_exists = "append",index  = False)
             print('time:{},wcode:{},ok'.format(datetime.now(),wind_code))
         print('t:{},codes:{}'.format(datetime.now(),','.join(windcodes)))
@@ -651,4 +653,4 @@ if __name__ == '__main__':
         if end  == '':
             end = None
 
-        s.get_sdata_bythread_frm_wind(start, start)
+        s.get_sdata_bythread_frm_wind(start, end)
