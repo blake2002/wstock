@@ -53,8 +53,8 @@ class Stock():
         self.a_cy_filename = 'all_wind_code.csv' # A股创业股windcode
         self.windtype_filename = 'wind_type_stock.csv' # wind行业分类 1类 wincode
         self.wind_stock_filename = 'wind_stock.csv' # A股创业股 行情 start end
-        self.start=start # 开始时间
-        self.end=end # 结束时间
+        self.start = start # 开始时间
+        self.end = end # 结束时间
         if self.end is None:
             self.end = datetime.now().strftime(DATETIME_FORMAT)
         if self.start is None:
@@ -102,7 +102,7 @@ class Stock():
 
         # 去掉 ST df['shortname'].str.contains('ST') == False
         no_st_wind_codes = list(self.windtype1_df.loc[self.windtype1_df['sec_name'].str.contains('ST') == False]['wind_code'])
-        no_st_filter = self.wind_stock_df['WINDCODE'].isin(no_st_wind_codes)
+        no_st_filter = self.wind_stock_df['WIND_CODE'].isin(no_st_wind_codes)
         self.wind_stock_df = self.wind_stock_df.loc[date_filter & no_st_filter]
         # 统一 成交额 单位为 亿  round(df['AMT']/100000000+1/100000000,2) 四舍五入
         self.wind_stock_df['AMT'] =  round(self.wind_stock_df['AMT']/100000000+1/100000000,2)
@@ -276,7 +276,7 @@ class Stock():
         df = self.wind_stock_df
 
         if codes is not None:
-            df = self.wind_stock_df.loc[self.wind_stock_df['WINDCODE'].isin(codes)]
+            df = self.wind_stock_df.loc[self.wind_stock_df['WIND_CODE'].isin(codes)]
 
         #为了统计方便 增加一列 值都为 1
         df['CHG_FLAG']=1
@@ -359,7 +359,7 @@ class Stock():
         # 列出板块 涨停股
         :return:
         """
-        df = self.wind_stock_df.sort_values(["WINDCODE","DATE_TIME"])
+        df = self.wind_stock_df.sort_values(["WIND_CODE","DATE_TIME"])
         df['CONTINOUS_FLAG']=pd.RangeIndex(0,len(df))
         maxup_df = df.loc[df['MAXUPORDOWN'] ==1] #1 涨停
         type_df = self.windtype1_df
@@ -449,7 +449,7 @@ class Stock():
             if not os.path.exists(df_path):
                 df=w.wsd(wind_code, "windcode,amt,chg,high3,low3,close3,trade_status,maxup,maxupordown", start_time, end_time, "", usedf=True)
                 # df[1].reset_index(inplace=True)
-                df[1].rename(columns={'windcode':'WIND_CODE'})
+                df[1].rename(columns={'WINDCODE':'WIND_CODE'})
                 df[1].to_csv(df_path)
                 print('save windcode:{},to path:{} ok'.format(wind_code,df_path))
                 time.sleep(random.randint(1,5))
